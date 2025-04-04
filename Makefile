@@ -1,14 +1,14 @@
 # Update this path to your actual libtorch installation directory
-TORCH_PATH ?= /path/to/libtorch
+TORCH_PATH ?= /Users/hanluxu/Downloads/libtorch
 
 CXX = g++
 
 # Flags for the libtorch-based program
-LIBTORCH_CXXFLAGS = -O3 -std=c++14 -I$(TORCH_PATH)/include -I$(TORCH_PATH)/include/torch/csrc/api/include
-LIBTORCH_LDFLAGS  = -L$(TORCH_PATH)/lib -Wl,-rpath=$(TORCH_PATH)/lib -ltorch -lc10
+LIBTORCH_CXXFLAGS = -O3 -std=c++17 -I$(TORCH_PATH)/include -I$(TORCH_PATH)/include/torch/csrc/api/include
+LIBTORCH_LDFLAGS  = -L$(TORCH_PATH)/lib -Wl,-rpath,$(TORCH_PATH)/lib -ltorch_cpu -ltorch -lc10
 
 # Flags for the plain program (which does not require libtorch)
-PLAIN_CXXFLAGS = -O3 -std=c++14
+PLAIN_CXXFLAGS = -O3 -std=c++17
 
 # Source files
 LIBTORCH_SRCS = semi_alpha_zero.cc

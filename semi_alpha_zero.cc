@@ -43,8 +43,8 @@ struct SemiProgramModelImpl : torch::nn::Module {
                 torch::nn::BatchNorm2d(128)
             );
             // Initialize convolution weights in the block.
-            for (auto& module : block) {
-                if (auto conv = module->as<torch::nn::Conv2d>()) {
+            for (const auto& module : block->children()) {
+                if (auto conv = dynamic_cast<torch::nn::Conv2dImpl*>(module.get())) {
                     conv->weight.data().fill_(0.01);
                     conv->bias.data().fill_(0.0);
                 }
