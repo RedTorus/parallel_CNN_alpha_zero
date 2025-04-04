@@ -203,7 +203,7 @@ int main() {
                  value_output, policy_output.data());
     
     // ----- Write Final Results to File -----
-    std::ofstream outfile("output.txt");
+    std::ofstream outfile("output_plain.txt");
     if (!outfile.is_open()) {
         std::cerr << "Error opening output file!" << std::endl;
         return 1;

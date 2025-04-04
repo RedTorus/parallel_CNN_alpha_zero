@@ -108,6 +108,30 @@ struct SemiProgramModelImpl : torch::nn::Module {
 };
 TORCH_MODULE(SemiProgramModel);
 
+// Unified output function: writes the value and policy outputs with fixed precision.
+void write_output(const torch::Tensor& value_tensor, const torch::Tensor& policy_tensor, const std::string& filename) {
+    std::ofstream outfile(filename);
+    if (!outfile) {
+        std::cerr << "Failed to open output file: " << filename << std::endl;
+        return;
+    }
+    // Use scientific notation with 6 digits of precision.
+    outfile << std::scientific << std::setprecision(6);
+    
+    // Write value output.
+    float value = value_tensor.item<float>();
+    outfile << "Value Output (1x1):\n" << value << "\n";
+    
+    // Write policy output.
+    auto policy_flat = policy_tensor.view({-1});
+    outfile << "Policy Output (1x512):\n";
+    for (int i = 0; i < policy_flat.size(0); ++i) {
+        outfile << policy_flat[i].item<float>() << " ";
+    }
+    outfile << "\n";
+    outfile.close();
+}
+
 int main() {
     // ----- Device Setup -----
     // Use CUDA if available; otherwise, fall back to CPU.
@@ -132,15 +156,8 @@ int main() {
     value_output = value_output.to(torch::kCPU);
     policy_output = policy_output.to(torch::kCPU);
 
-    // ----- Write Final Results to File -----
-    std::ofstream outfile("output_libtorch.txt");
-    if (!outfile.is_open()) {
-        std::cerr << "Error opening output file!" << std::endl;
-        return 1;
-    }
-    outfile << "Value Output (1x1): " << value_output.item<float>() << "\n";
-    outfile << "Policy Output (1x512): " << policy_output << "\n";
-    outfile.close();
+    // Write the outputs to file with unified formatting.
+    write_output(value_output, policy_output, "output_libtorch.txt");
 
     std::cout << "Computation complete. Results written to output_libtorch.txt" << std::endl;
     return 0;

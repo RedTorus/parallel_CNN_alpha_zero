@@ -50,6 +50,11 @@ run_semi: $(LIBTORCH_TARGET)
 run_plain: $(PLAIN_TARGET)
 	./$(PLAIN_TARGET)
 
+# Compare the outputs of the two programs
+compare: run_semi run_plain
+	@echo "Comparing output_libtorch.txt and output_plain.txt..."
+	@diff -u output_libtorch.txt output_plain.txt && echo "Outputs match!" || echo "Outputs differ!"
+
 clean:
 	rm -f $(LIBTORCH_OBJS) $(PLAIN_OBJS) $(LIBTORCH_TARGET) $(PLAIN_TARGET) *.txt
 
