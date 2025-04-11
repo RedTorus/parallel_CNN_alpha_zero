@@ -16,17 +16,17 @@ struct SemiProgramModelImpl : torch::nn::Module {
     // Output layer: two branches (value and policy).
     // Value head: 1x1 conv (128->1) and a linear layer mapping flattened [1,1,8,8] (64 dims) to [1,1].
     torch::nn::Conv2d value_conv{nullptr};
-    torch::nn::Linear value_fc{nullptr};
+    torch::nn::Linear value_linear{nullptr};
 
     // Policy head: 1x1 conv (128->2) and a linear layer mapping flattened [1,2,8,8] (128 dims) to [1,512].
     torch::nn::Conv2d policy_conv{nullptr};
-    torch::nn::Linear policy_fc{nullptr};
+    torch::nn::Linear policy_linear{nullptr};
 
     SemiProgramModelImpl() {
         // ----- Input Layer -----
         // Create a conv layer with kernel size 3, padding=1.
         input_conv = register_module("input_conv", torch::nn::Conv2d(
-            torch::nn::Conv2dOptions(5, 128, /*kernel_size=*/3).padding(1)));
+            torch::nn::Conv2dOptions(5, 128, /*kernel_size=*/3).stride(1).padding(1)));
         input_conv->weight.data().fill_(0.01);
         input_conv->bias.data().fill_(0.0);
 
@@ -35,11 +35,11 @@ struct SemiProgramModelImpl : torch::nn::Module {
         for (int i = 0; i < 5; i++) {
             torch::nn::Sequential block(
                 // First convolution + BN + ReLU.
-                torch::nn::Conv2d(torch::nn::Conv2dOptions(128, 128, /*kernel_size=*/3).padding(1)),
+                torch::nn::Conv2d(torch::nn::Conv2dOptions(128, 128, /*kernel_size=*/3).stride(1).padding(1)),
                 torch::nn::BatchNorm2d(128),
                 torch::nn::ReLU(),
                 // Second convolution + BN.
-                torch::nn::Conv2d(torch::nn::Conv2dOptions(128, 128, /*kernel_size=*/3).padding(1)),
+                torch::nn::Conv2d(torch::nn::Conv2dOptions(128, 128, /*kernel_size=*/3).stride(1).padding(1)),
                 torch::nn::BatchNorm2d(128)
             );
             // Initialize convolution weights in the block.
@@ -55,23 +55,27 @@ struct SemiProgramModelImpl : torch::nn::Module {
         // ----- Output Layer -----
         // Value head: 1x1 conv to get [1,1,8,8]
         value_conv = register_module("value_conv", torch::nn::Conv2d(
-            torch::nn::Conv2dOptions(128, 1, /*kernel_size=*/1)));
+            torch::nn::Conv2dOptions(128, 1, /*kernel_size=*/1).stride(1)));
         value_conv->weight.data().fill_(0.01);
         value_conv->bias.data().fill_(0.0);
         // Linear layer: flatten [1,1,8,8] to a vector of 64 elements and map to 1 output.
-        value_fc = register_module("value_fc", torch::nn::Linear(8 * 8, 1));
-        value_fc->weight.data().fill_(0.01);
-        value_fc->bias.data().fill_(0.0);
+        /*
+        value_linear = register_module("value_linear", torch::nn::Linear(8 * 8, 1));
+        value_linear->weight.data().fill_(0.01);
+        value_linear->bias.data().fill_(0.0);
+        */
 
         // Policy head: 1x1 conv to get [1,2,8,8]
         policy_conv = register_module("policy_conv", torch::nn::Conv2d(
-            torch::nn::Conv2dOptions(128, 2, /*kernel_size=*/1)));
+            torch::nn::Conv2dOptions(128, 2, /*kernel_size=*/1).stride(1)));
         policy_conv->weight.data().fill_(0.01);
         policy_conv->bias.data().fill_(0.0);
         // Linear layer: flatten [1,2,8,8] to a vector of 128 elements and map to 512 outputs.
-        policy_fc = register_module("policy_fc", torch::nn::Linear(2 * 8 * 8, 512));
-        policy_fc->weight.data().fill_(0.01);
-        policy_fc->bias.data().fill_(0.0);
+        /*
+        policy_linear = register_module("policy_linear", torch::nn::Linear(2 * 8 * 8, 512));
+        policy_linear->weight.data().fill_(0.01);
+        policy_linear->bias.data().fill_(0.0);
+        */
     }
 
     // Forward pass returns a pair: (value output, policy output)
@@ -95,13 +99,13 @@ struct SemiProgramModelImpl : torch::nn::Module {
         // Value Head:
         auto v = torch::relu(value_conv->forward(out));  // [1,1,8,8]
         v = v.view({1, -1});                              // Flatten to [1,64]
-        v = value_fc->forward(v);                         // Fully connected to [1,1]
-        v = torch::tanh(v);                               // Apply tanh
+        //v = torch::relu(value_linear->forward(v));                         // Fully connected to [1,1]
+        //v = torch::tanh(value_linear->forward(v));                               // Apply tanh
 
         // Policy Head:
         auto p = torch::relu(policy_conv->forward(out));  // [1,2,8,8]
         p = p.view({1, -1});                              // Flatten to [1,128]
-        p = policy_fc->forward(p);                        // Fully connected to [1,512]
+        //p = policy_linear->forward(p);                        // Fully connected to [1,512]
 
         return std::make_pair(v, p);
     }
@@ -119,12 +123,16 @@ void write_output(const torch::Tensor& value_tensor, const torch::Tensor& policy
     outfile << std::scientific << std::setprecision(6);
     
     // Write value output.
-    float value = value_tensor.item<float>();
-    outfile << "Value Output (1x1):\n" << value << "\n";
+    auto value_flat = value_tensor.view({-1});
+    outfile << "Value Output (1x" << value_flat.size(0) << "):\n";
+    for (int i = 0; i < value_flat.size(0); ++i) {
+        outfile << value_flat[i].item<float>() << " ";
+    }
+    outfile << "\n";
     
     // Write policy output.
     auto policy_flat = policy_tensor.view({-1});
-    outfile << "Policy Output (1x512):\n";
+    outfile << "Policy Output (1x" << policy_flat.size(0) << "):\n";
     for (int i = 0; i < policy_flat.size(0); ++i) {
         outfile << policy_flat[i].item<float>() << " ";
     }
