@@ -82,5 +82,5 @@ compare: run_semi run_parallel
 compare_cnn: run_semi_compare_cnn
 
 clean:
-	rm -f $(LIBTORCH_OBJS) $(PARALLEL_OBJS) $(LIBTORCH_TARGET) $(PARALLEL_TARGET) $(COMPARE_TARGET) *.txt
+	rm -f $(LIBTORCH_OBJS) $(PARALLEL_OBJS) $(COMPARE_OBJS) $(LIBTORCH_TARGET) $(PARALLEL_TARGET) $(COMPARE_TARGET) *.txt
 

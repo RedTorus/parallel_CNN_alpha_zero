@@ -1,6 +1,7 @@
 #include <torch/torch.h>
 #include <iostream>
 #include <chrono>
+#include <cuda_runtime.h>
 
 // Declarations for custom CUDA operators.
 torch::Tensor torso_conv_forward(torch::Tensor input, torch::Tensor filter);
@@ -40,6 +41,12 @@ int main() {
     torch::Device device = torch::cuda::is_available() ? torch::kCUDA : torch::kCPU;
     std::cout << "Using device: " << (device.is_cuda() ? "CUDA" : "CPU") << std::endl;
 
+    // Create cuda event for timinf
+    cudaEvent_t start_, stop_;
+    cudaEventCreate(&start_);
+    cudaEventCreate(&stop_);
+    float elapsed_gpu_;
+
     // Create a dummy input tensor: batch size 1, channels, image.
     torch::Tensor input = torch::rand({1, 128, 8, 8});
     input = input.to(device);
@@ -51,20 +58,22 @@ int main() {
     conv_layer->weight.data().fill_(0.01);
     conv_layer->bias.data().fill_(0.0);
     conv_layer->to(device);
-    auto start = std::chrono::steady_clock::now();
+    cudaEventRecord(start_, 0);
     torch::Tensor output1 = conv_layer(input);
-    auto end = std::chrono::steady_clock::now();
-    std::chrono::duration<double> elapsed1 = end - start;
-    std::cout << "Libtorch CNN took " << elapsed1.count() << " seconds." << std::endl;
+    cudaEventRecord(stop_, 0);
+    cudaEventSynchronize(stop_);
+    cudaEventElapsedTime(&elapsed_gpu_, start_, stop_);
+    std::cout << "Libtorch CNN took " << elapsed_gpu_ << " ms." << std::endl;
 
     // Run forward pass of parallelized CNN and measure time.
     auto customized_filter = torch::full({128, 128, 3, 3}, 0.01, torch::TensorOptions().dtype(torch::kFloat).device(device));
-    start = std::chrono::steady_clock::now();
+    cudaEventRecord(start_, 0);
     torch::Tensor output2 = torso_conv_forward(input, customized_filter); // Returns shape [128, 8, 8] (batch dropped).
     output2 = output2.unsqueeze(0);                                  // Restore batch dim: [1, 128, 8, 8].
-    end = std::chrono::steady_clock::now();
-    std::chrono::duration<double> elapsed2 = end - start;
-    std::cout << "Parallelized CNN took " << elapsed2.count() << " seconds." << std::endl;
+    cudaEventRecord(stop_, 0);
+    cudaEventSynchronize(stop_);
+    cudaEventElapsedTime(&elapsed_gpu_, start_, stop_);
+    std::cout << "Parallelized CNN took " << elapsed_gpu_ << " ms." << std::endl;
 
     write_output(output1, "cnn_baseline.txt");
     write_output(output2, "cnn_parallel.txt");
