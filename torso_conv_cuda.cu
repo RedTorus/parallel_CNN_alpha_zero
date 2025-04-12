@@ -100,6 +100,7 @@ torch::Tensor torso_conv_forward(torch::Tensor input, torch::Tensor filter) {
     }
     
     // We assume batch = 1.
+    int B = input.size(0);
     int in_channels = input.size(1);   // 128.
     int in_height = input.size(2);       // 8.
     int in_width = input.size(3);        // 8.
@@ -109,7 +110,7 @@ torch::Tensor torso_conv_forward(torch::Tensor input, torch::Tensor filter) {
     int out_channels = filter.size(0);   // 128.
     
     // Create output tensor of shape [out_channels, out_height, out_width].
-    auto output = torch::zeros({out_channels, out_height, out_width}, input.options());
+    auto output = torch::zeros({B, out_channels, out_height, out_width}, input.options());
     
     // Launch one block per output channel.
     //dim3 block(BLOCK_DIM_X, BLOCK_DIM_Y); // organize 128 x 8 threads in a TB

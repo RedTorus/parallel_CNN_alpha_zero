@@ -92,6 +92,7 @@ torch::Tensor output_conv_forward(torch::Tensor input, torch::Tensor filter) {
     }
 
     // Input is expected to have shape [128, 8, 8].
+    int B = input.size(0);
     int in_channels = input.size(1);  // 128.
     int in_height = input.size(2);      // 8.
     int in_width = input.size(3);       // 8.
@@ -100,7 +101,7 @@ torch::Tensor output_conv_forward(torch::Tensor input, torch::Tensor filter) {
     int out_width = in_width;
     int out_channels = filter.size(0);  // For value_conv, 1; for policy_conv, 2.
 
-    auto output = torch::zeros({out_channels, out_height, out_width}, input.options());
+    auto output = torch::zeros({B, out_channels, out_height, out_width}, input.options());
 
     //dim3 block(OUTPUT_BLOCK_DIM_X, OUTPUT_BLOCK_DIM_Y);
     //dim3 grid(out_channels);
