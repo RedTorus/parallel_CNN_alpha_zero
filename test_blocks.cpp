@@ -1,68 +1,143 @@
 // test_blocks.cpp
 #include <torch/torch.h>
 #include <iostream>
-#include <chrono>
+#include <cuda_runtime.h>
 #include "model.h"
 
-int main() {
-    // Create a dummy input tensor: batch size 1, 3 channels, 224x224 image.
-    torch::Tensor input = torch::rand({1, 3, 224, 224});
+// Global device variable: change torch::kCUDA to torch::kCPU if needed.
+const torch::Device device(torch::kCUDA);
 
-    //---------- Test Conv2dBlock ----------
+void testConv2dBlock(const torch::Tensor& input) {
     std::cout << "Testing Conv2dBlock:" << std::endl;
     Conv2dBlock convBlock(3, 16, 3, 1, 1);
-    auto start = std::chrono::steady_clock::now();
-    torch::Tensor output = convBlock->forward(input);
-    auto end = std::chrono::steady_clock::now();
-    std::chrono::duration<double> elapsed = end - start;
-    std::cout << "Conv2dBlock output size: " << output.sizes()
-              << " (Forward pass took " << elapsed.count() << " seconds)" << std::endl;
+    // Move module to the global device.
+    convBlock->to(device);
 
-    //---------- Test ResInputBlock ----------
+    cudaEvent_t startEvent, stopEvent;
+    cudaEventCreate(&startEvent);
+    cudaEventCreate(&stopEvent);
+
+    cudaEventRecord(startEvent, 0);
+    torch::Tensor output = convBlock->forward(input);
+    cudaEventRecord(stopEvent, 0);
+    cudaEventSynchronize(stopEvent);
+
+    float elapsedTime;
+    cudaEventElapsedTime(&elapsedTime, startEvent, stopEvent);
+    std::cout << "Conv2dBlock output size: " << output.sizes()
+              << " (Forward pass took " << elapsedTime / 1000.0f << " seconds)" << std::endl;
+
+    cudaEventDestroy(startEvent);
+    cudaEventDestroy(stopEvent);
+}
+
+void testResInputBlock(const torch::Tensor& input) {
     std::cout << "\nTesting ResInputBlock:" << std::endl;
     ResInputBlock resInput(3, 64, 3, 1, 1);
-    start = std::chrono::steady_clock::now();
-    output = resInput->forward(input);
-    end = std::chrono::steady_clock::now();
-    elapsed = end - start;
+    resInput->to(device);
+
+    cudaEvent_t startEvent, stopEvent;
+    cudaEventCreate(&startEvent);
+    cudaEventCreate(&stopEvent);
+
+    cudaEventRecord(startEvent, 0);
+    torch::Tensor output = resInput->forward(input);
+    cudaEventRecord(stopEvent, 0);
+    cudaEventSynchronize(stopEvent);
+
+    float elapsedTime;
+    cudaEventElapsedTime(&elapsedTime, startEvent, stopEvent);
     std::cout << "ResInputBlock output size: " << output.sizes()
-              << " (Forward pass took " << elapsed.count() << " seconds)" << std::endl;
+              << " (Forward pass took " << elapsedTime / 1000.0f << " seconds)" << std::endl;
 
-    //---------- Test ResTorsoBlock ----------
+    cudaEventDestroy(startEvent);
+    cudaEventDestroy(stopEvent);
+}
+
+void testResTorsoBlock(const torch::Tensor& featureMap) {
     std::cout << "\nTesting ResTorsoBlock:" << std::endl;
-    // Simulate a feature map with 64 channels and spatial dimensions 56x56.
-    torch::Tensor featureMap = torch::rand({1, 64, 56, 56});
     ResTorsoBlock resTorso(64, 3, 1, 1);
-    start = std::chrono::steady_clock::now();
-    output = resTorso->forward(featureMap);
-    end = std::chrono::steady_clock::now();
-    elapsed = end - start;
+    resTorso->to(device);
+
+    cudaEvent_t startEvent, stopEvent;
+    cudaEventCreate(&startEvent);
+    cudaEventCreate(&stopEvent);
+
+    cudaEventRecord(startEvent, 0);
+    torch::Tensor output = resTorso->forward(featureMap);
+    cudaEventRecord(stopEvent, 0);
+    cudaEventSynchronize(stopEvent);
+
+    float elapsedTime;
+    cudaEventElapsedTime(&elapsedTime, startEvent, stopEvent);
     std::cout << "ResTorsoBlock output size: " << output.sizes()
-              << " (Forward pass took " << elapsed.count() << " seconds)" << std::endl;
+              << " (Forward pass took " << elapsedTime / 1000.0f << " seconds)" << std::endl;
 
-    //---------- Test ResOutputBlock ----------
+    cudaEventDestroy(startEvent);
+    cudaEventDestroy(stopEvent);
+}
+
+void testResOutputBlock(const torch::Tensor& featureMap, int flattened_features) {
     std::cout << "\nTesting ResOutputBlock:" << std::endl;
-    // Assuming the feature map is 64 channels with spatial dimensions 56x56.
-    int flattened_features = 64 * 56 * 56;
-    // Reuse the featureMap tensor from above.
     ResOutputBlock resOutput(flattened_features, 10);
-    start = std::chrono::steady_clock::now();
-    output = resOutput->forward(featureMap);
-    end = std::chrono::steady_clock::now();
-    elapsed = end - start;
-    std::cout << "ResOutputBlock output size: " << output.sizes()
-              << " (Forward pass took " << elapsed.count() << " seconds)" << std::endl;
+    resOutput->to(device);
 
-    //---------- Test MLPOutputBlock ----------
+    cudaEvent_t startEvent, stopEvent;
+    cudaEventCreate(&startEvent);
+    cudaEventCreate(&stopEvent);
+
+    cudaEventRecord(startEvent, 0);
+    torch::Tensor output = resOutput->forward(featureMap);
+    cudaEventRecord(stopEvent, 0);
+    cudaEventSynchronize(stopEvent);
+
+    float elapsedTime;
+    cudaEventElapsedTime(&elapsedTime, startEvent, stopEvent);
+    std::cout << "ResOutputBlock output size: " << output.sizes()
+              << " (Forward pass took " << elapsedTime / 1000.0f << " seconds)" << std::endl;
+
+    cudaEventDestroy(startEvent);
+    cudaEventDestroy(stopEvent);
+}
+
+void testMLPOutputBlock(const torch::Tensor& featureMap, int flattened_features) {
     std::cout << "\nTesting MLPOutputBlock:" << std::endl;
     MLPOutputBlock mlpOutput(flattened_features, 128, 10);
-    start = std::chrono::steady_clock::now();
-    output = mlpOutput->forward(featureMap);
-    end = std::chrono::steady_clock::now();
-    elapsed = end - start;
+    mlpOutput->to(device);
+
+    cudaEvent_t startEvent, stopEvent;
+    cudaEventCreate(&startEvent);
+    cudaEventCreate(&stopEvent);
+
+    cudaEventRecord(startEvent, 0);
+    torch::Tensor output = mlpOutput->forward(featureMap);
+    cudaEventRecord(stopEvent, 0);
+    cudaEventSynchronize(stopEvent);
+
+    float elapsedTime;
+    cudaEventElapsedTime(&elapsedTime, startEvent, stopEvent);
     std::cout << "MLPOutputBlock output size: " << output.sizes()
-              << " (Forward pass took " << elapsed.count() << " seconds)" << std::endl;
+              << " (Forward pass took " << elapsedTime / 1000.0f << " seconds)" << std::endl;
+
+    cudaEventDestroy(startEvent);
+    cudaEventDestroy(stopEvent);
+}
+
+int main() {
+    std::cout << "CUDA available? " << torch::cuda::is_available() << std::endl;
+
+    // Create a dummy input tensor on the global device.
+    torch::Tensor input = torch::rand({1, 3, 224, 224}, torch::TensorOptions().device(device));
+    testConv2dBlock(input);
+    testResInputBlock(input);
+
+    // Create a dummy feature map on the global device.
+    torch::Tensor featureMap = torch::rand({1, 64, 56, 56}, torch::TensorOptions().device(device));
+    testResTorsoBlock(featureMap);
+
+    int flattened_features = 64 * 56 * 56;
+    testResOutputBlock(featureMap, flattened_features);
+    testMLPOutputBlock(featureMap, flattened_features);
 
     return 0;
 }
-
