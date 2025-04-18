@@ -1,31 +1,58 @@
-# Set LIBTORCH to your libtorch installation directory.
-# You can override this variable externally, e.g., `make LIBTORCH=/your/path/to/libtorch`
-LIBTORCH ?= /home/kaust/libtorch
+# -------- CONFIGURATION --------
+# Set paths to LibTorch and CUDA
+LIBTORCH   ?= /afs/.ece.cmu.edu/usr/kaustabp/open_spiel/open_spiel/libtorch/libtorch
+CUDA_PATH  ?= /usr/local/cuda
 
-# Compiler and flags
-CXX      = g++
-CXXFLAGS = -std=c++17 -O2 -Wall -D_GLIBCXX_USE_CXX11_ABI=1 \
-           -I$(LIBTORCH)/include \
-           -I$(LIBTORCH)/include/torch/csrc/api/include \
-           -I/usr/local/cuda/include
+# Compilers
+CXX        = g++
+NVCC       = nvcc
 
-# Linker flags: use RPATH so that the shared libraries are found at runtime.
-# The --no-as-needed / --as-needed flags ensure that all the provided libraries are retained.
-LDFLAGS  = -L$(LIBTORCH)/lib -Wl,-rpath,$(LIBTORCH)/lib \
-           -Wl,--no-as-needed -ltorch -ltorch_cpu -ltorch_cuda -lc10 -lc10_cuda -Wl,--as-needed \
-           -L/usr/local/cuda/lib64 -lcudart
+# Include dirs (for both C++ and CUDA) and Python includes
+INCLUDES   = -I$(LIBTORCH)/include \
+	         -I$(LIBTORCH)/include/torch/csrc/api/include \
+	         -I$(CUDA_PATH)/include \
+	         $(shell python3-config --includes)
 
-# Targets
-all: test_blocks test_model test_compare
+# Flags
+CXXFLAGS   = -O3 -std=c++17 $(INCLUDES) \
+	            -I$(LIBTORCH)/include/pybind11_ \
+	            -fPIC
+NVCCFLAGS  = -O3 -std=c++17 -Xcompiler -fPIC \
+	         -I$(LIBTORCH)/include \
+	         -I$(LIBTORCH)/include/torch/csrc/api/include \
+	         -I$(LIBTORCH)/include/pybind11_ \
+	         -I$(CUDA_PATH)/include \
+	         $(shell python3-config --includes)
+
+
+# Linker flags
+LDFLAGS    = -L$(LIBTORCH)/lib \
+	         -L$(CUDA_PATH)/targets/x86_64-linux/lib \
+	         -Wl,-rpath,$(LIBTORCH)/lib \
+	         -ltorch -ltorch_cpu -lc10 \
+	         -ltorch_cuda -lc10_cuda -lcudart \
+	         -ldl -lpthread -lrt
+
+.PHONY: all clean
+all: test_kernel
+
+# Compile CUDA kernel
+input_conv.o: input_conv.cu input_conv.h
+	$(NVCC) $(NVCCFLAGS) -c input_conv.cu -o input_conv.o
+
+test_blocks.o: test_blocks.cpp test_blocks.h
+	$(CXX) $(CXXFLAGS) -c test_blocks.cpp -o test_blocks.o
+
+# Compile C++ test harness
+test_kernel.o: test_kernel.cpp input_conv.h test_blocks.h
+	$(CXX) $(CXXFLAGS) -c test_kernel.cpp -o test_kernel.o
+
+# Link objects using g++ so -Wl flags are understood
+test_kernel: input_conv.o test_blocks.o test_kernel.o
+	$(CXX) input_conv.o test_blocks.o test_kernel.o -o test_kernel $(LDFLAGS)
 
 test_blocks: test_blocks.cpp model.h
 	$(CXX) $(CXXFLAGS) test_blocks.cpp -o test_blocks $(LDFLAGS)
 
-test_model: test_model.cpp model.h
-	$(CXX) $(CXXFLAGS) test_model.cpp -o test_model $(LDFLAGS)
-
-test_compare: test_compare.cpp model.h
-	$(CXX) $(CXXFLAGS) test_compare.cpp -o test_compare $(LDFLAGS)
-
 clean:
-	rm -f test_blocks test_model test_compare
+	rm -f *.o test_kernel

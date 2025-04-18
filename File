@@ -1,0 +1,40 @@
+# -------- CONFIGURATION --------
+# Set LIBTORCH to the directory that directly contains "include" and "lib".
+LIBTORCH ?= /afs/.ece.cmu.edu/usr/kaustabp/open_spiel/open_spiel/libtorch/libtorch
+CUDA_PATH  ?= /usr/local/cuda
+TORCH_PATH ?= LIBTORCH
+CXX  = g++
+NVCC = nvcc
+
+# -------- FLAGS --------
+LIBTORCH_CXXFLAGS = -O3 -std=c++17 \
+    -I$(LIBTORCH)/include \
+    -I$(LIBTORCH)/include/torch/csrc/api/include \
+    -I$(CUDA_PATH)/include
+
+LIBTORCH_LDFLAGS  = -L$(LIBTORCH)/lib \
+    -L$(CUDA_PATH)/targets/x86_64-linux/lib \
+    -Wl,-rpath,$(LIBTORCH)/lib \
+    -ltorch_cpu -ltorch -lcudart -ltorch_cuda -lc10 -lc10_cuda
+
+NVCCFLAGS = -O3 -std=c++17 -Xcompiler -fPIC \
+    -I$(LIBTORCH)/include \
+    -I$(LIBTORCH)/include/torch/csrc/api/include \
+    -I$(CUDA_PATH)/include \
+    $(shell python3-config --includes)
+
+
+# -------- TARGETS --------
+all: test_model test_blocks test_compare
+
+test_model: test_model.cpp model.h
+	$(CXX) $(LIBTORCH_CXXFLAGS) test_model.cpp -o test_model $(LIBTORCH_LDFLAGS)
+
+test_blocks: test_blocks.cpp model.h
+	$(CXX) $(LIBTORCH_CXXFLAGS) test_blocks.cpp -o test_blocks $(LIBTORCH_LDFLAGS)
+
+test_compare: test_compare.cpp model.h
+	$(CXX) $(LIBTORCH_CXXFLAGS) test_compare.cpp -o test_compare $(LIBTORCH_LDFLAGS)
+
+clean:
+	rm -f test_model test_blocks test_compare

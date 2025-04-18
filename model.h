@@ -8,6 +8,25 @@
 //---------------------------------------
 // Conv2dBlockImpl: A simple conv2d block with BatchNorm and ReLU.
 //---------------------------------------
+struct Conv2dSimpleImpl : public torch::nn::Module {
+    torch::nn::Conv2d conv{nullptr};
+
+    // Constructor: in/out channels with optional kernel size, stride, and padding.
+    Conv2dSimpleImpl(int in_channels, int out_channels, int kernel_size = 3, int stride = 1, int padding = 1) {
+        conv = register_module("conv", torch::nn::Conv2d(torch::nn::Conv2dOptions(in_channels, out_channels, kernel_size)
+                                                         .stride(stride).padding(padding).bias(false)));
+    }
+
+    torch::Tensor forward(torch::Tensor x) {
+        x = conv(x);
+        return x;
+    }
+};
+TORCH_MODULE(Conv2dSimple);
+
+//---------------------------------------
+// Conv2dBlockImpl: A simple conv2d block with BatchNorm and ReLU.
+//---------------------------------------
 struct Conv2dBlockImpl : public torch::nn::Module {
     torch::nn::Conv2d conv{nullptr};
     torch::nn::BatchNorm2d bn{nullptr};
