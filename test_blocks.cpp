@@ -11,6 +11,32 @@ bool outputs_identical(const torch::Tensor& out1, const torch::Tensor& out2, dou
     return torch::allclose(out1, out2, tol);
 }
 
+torch::Tensor computeAverageAbsoluteDifference(const torch::Tensor& tensor1, const torch::Tensor& tensor2) {
+    // Ensure both tensors are on the same device
+    TORCH_CHECK(tensor1.device() == tensor2.device(), "Tensors must be on the same device");
+
+    // Compute elementwise absolute difference
+    torch::Tensor abs_diff = torch::abs(tensor1 - tensor2);
+
+    // Compute the average of the absolute differences
+    torch::Tensor avg_diff = abs_diff.mean();
+
+    return avg_diff;
+}
+
+torch::Tensor computeAbsoluteDifferenceSum(const torch::Tensor& tensor1, const torch::Tensor& tensor2) {
+    // Ensure both tensors are on the same device
+    TORCH_CHECK(tensor1.device() == tensor2.device(), "Tensors must be on the same device");
+
+    // Compute elementwise absolute difference
+    torch::Tensor abs_diff = torch::abs(tensor1 - tensor2);
+
+    // Sum all elements
+    torch::Tensor sum_diff = abs_diff.sum();
+
+    return sum_diff;
+}
+
 void testConv2dBlock(const torch::Tensor& input) {
     std::cout << "Testing Conv2dBlock:" << std::endl;
     Conv2dBlock convBlock(5, 128, 3, 1, 1);
@@ -64,6 +90,33 @@ void testConv2dBlock2(const torch::Tensor& input, const torch::Tensor& conv_weig
 torch::Tensor testConv2dBlock3(const torch::Tensor& input, const torch::Tensor& conv_weights) {
     std::cout << "Testing Conv2dBlock:" << std::endl;
     Conv2dSimple convBlock(5, 128, 3, 1, 1);
+    convBlock->conv->weight = conv_weights;
+    convBlock->conv->bias = torch::zeros({128}, torch::TensorOptions().device(device));
+    // Move module to the global device.
+    convBlock->to(device);
+
+    cudaEvent_t startEvent, stopEvent;
+    cudaEventCreate(&startEvent);
+    cudaEventCreate(&stopEvent);
+
+    cudaEventRecord(startEvent, 0);
+    torch::Tensor output = convBlock->forward(input);
+    cudaEventRecord(stopEvent, 0);
+    cudaEventSynchronize(stopEvent);
+
+    float elapsedTime;
+    cudaEventElapsedTime(&elapsedTime, startEvent, stopEvent);
+    std::cout << "Conv2dBlock output size: " << output.sizes()
+              << " (Forward pass took " << elapsedTime / 1000.0f << " seconds)" << std::endl;
+
+    cudaEventDestroy(startEvent);
+    cudaEventDestroy(stopEvent);
+    return output;
+}
+
+torch::Tensor testConv2dBlock4(const torch::Tensor& input, const torch::Tensor& conv_weights) {
+    std::cout << "Testing Conv2dBlock:" << std::endl;
+    Conv2dBlock convBlock(5, 128, 3, 1, 1);
     convBlock->conv->weight = conv_weights;
     convBlock->conv->bias = torch::zeros({128}, torch::TensorOptions().device(device));
     // Move module to the global device.

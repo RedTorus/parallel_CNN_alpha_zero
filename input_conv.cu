@@ -27,7 +27,7 @@ __global__ void input_conv_kernel(const float* __restrict__ d_input,
     float* __restrict__ d_output) {
 
         // For numT = 40
-        int numTB = blockDim.x;
+        int numT = blockDim.x;
         int TBid = blockIdx.x;
         int tid = threadIdx.x;
 
@@ -39,7 +39,7 @@ __global__ void input_conv_kernel(const float* __restrict__ d_input,
         // N -> (r,c) = (N/32, N%32)
 
         __shared__ float sharedInput[SHARED_ROWS][SHARED_COLS];
-        for (int flatIndex = tid; flatIndex < TOTAL_INPUT; flatIndex += numTB) {
+        for (int flatIndex = tid; flatIndex < TOTAL_INPUT; flatIndex += numT) {
         
             int sharedRow = flatIndex / SHARED_COLS;  // 0..255
             int sharedCol = flatIndex % SHARED_COLS;  // 0..31

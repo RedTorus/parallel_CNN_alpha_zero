@@ -4,7 +4,76 @@
 #include <torch/torch.h>
 #include <string>
 #include <iostream>
+#include "input_conv.h"
 
+//Conv2dKernelBlock 
+
+struct Conv2dKernelBlockImpl : public torch::nn::Module {
+    //torch::nn::Conv2d conv{nullptr};
+
+    torch::Tensor weight;
+    // BatchNorm layer
+    torch::nn::BatchNorm2d bn{nullptr};
+    int in_channels;
+    int out_channels;
+    int kernel_size;
+    int stride;
+    int padding;
+    Conv2dKernelBlockImpl(int in_channels_, int out_channels_, int kernel_size_ = 3,
+                          int stride_ = 1, int padding_ = 1)
+        : in_channels(in_channels_), out_channels(out_channels_), kernel_size(kernel_size_), stride(stride_), padding(padding_) {
+        
+        // Register custom weight tensor
+        auto options = torch::TensorOptions()
+                           .dtype(torch::kFloat32)
+                           .device(torch::kCUDA);
+
+        // Define weight shape as IntArrayRef
+        std::vector<int64_t> shape = {
+            int64_t(out_channels_),
+            int64_t(in_channels_),
+            int64_t(kernel_size_),
+            int64_t(kernel_size_)
+        };
+
+        // Register and initialize weight
+        weight = register_parameter(
+            "weight",
+            torch::zeros(c10::IntArrayRef(shape), options)
+        );
+
+
+        // Initialize weights (Kaiming Normal)
+        torch::nn::init::kaiming_normal_(weight, /*a=*/0, torch::kFanOut, torch::kReLU);
+        
+        // BatchNorm
+        bn = register_module(
+            "bn",
+            torch::nn::BatchNorm2d(torch::nn::BatchNorm2dOptions(out_channels))
+        );
+        bn->to(torch::kCUDA);
+    }
+
+    torch::Tensor forward(torch::Tensor x) {
+        // Expect x of shape [B, C, H, W]
+        TORCH_CHECK(x.dim() == 4 && x.size(1) == in_channels,
+                    "Conv2dKernelBlockImpl expected input shape [B, ", in_channels,
+                    ", H, W]");
+        auto batch_size = x.size(0);
+
+        // Call custom CUDA forward (expects batch size 1)
+        //std::cout << "x shape: " << x.sizes() << "device: " << x.device() << std::endl;
+        //std::cout << "weight shape: " << weight.sizes() << "device: " << weight.device() << std::endl;
+        torch::Tensor conv_out = input_conv_forward(x, weight);
+        // conv_out shape: [B, out_channels, H, W]
+        //std::cout << "conv_out shape: " << conv_out.sizes() << " device: " << conv_out.device() << std::endl;
+        // Apply BatchNorm and ReLU
+        torch::Tensor y = bn(conv_out);
+        //std::cout << "y shape: " << y.sizes() << " device: " << y.device() << std::endl;
+        return torch::relu(y);
+    }
+};
+TORCH_MODULE(Conv2dKernelBlock);
 //---------------------------------------
 // Conv2dBlockImpl: A simple conv2d block with BatchNorm and ReLU.
 //---------------------------------------

@@ -3,6 +3,7 @@
 #include <cuda_runtime.h>
 #include "input_conv.h"
 #include "test_blocks.h"
+#include "model.h"
 
 int main() {
     // Define the input tensor
@@ -47,11 +48,46 @@ int main() {
     // Test Conv2dBlock
     //time
     torch::Tensor out2 = testConv2dBlock3(input, conv_weights);
+    std::cout << "Here we are comparing conv2d block with input_conv_forward" << std::endl;
     bool identical = outputs_identical(output, out2);
     if (identical) {
         std::cout << "Outputs are identical." << std::endl;
     } else {
         std::cout << "Outputs are different." << std::endl;
     }
+
+    // Test Conv2dKernelBlock
+
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+
+    Conv2dKernelBlock conv2d_kernel_block(input_channels, output_channels, kernel_size);
+    conv2d_kernel_block->weight = conv_weights;
+    cudaEventRecord(start, 0);
+    torch::Tensor output_kernel = conv2d_kernel_block->forward(input);
+    //std::cout << "---Output kernel shape: " << output_kernel.sizes() << std::endl;
+    cudaEventRecord(stop, 0);
+    cudaEventSynchronize(stop);
+    float kernel_block_time = 0;
+    cudaEventElapsedTime(&kernel_block_time, start, stop);
+    std::cout << "Output shape: " << output_kernel.sizes() << std::endl;
+    std::cout << "Time taken for Conv2dKernelBlock: " << kernel_block_time / 1000.0 << " seconds" << std::endl;
+
+
+    torch::Tensor output_desired = testConv2dBlock4(input, conv_weights);
+
+    std::cout << "Here we are comparing conv2d kernel block with conv2d block" << std::endl;
+    identical = outputs_identical(output_kernel, output_desired, 1e-3);
+    if (identical) {
+        std::cout << "Outputs are identical." << std::endl;
+    } else {
+        std::cout << "Outputs are different." << std::endl;
+    }
+
+    torch::Tensor diffsum = computeAbsoluteDifferenceSum(output_kernel, output_desired);
+    std::cout << "Sum of absolute differences: " << diffsum.item<float>() << std::endl;
+    torch::Tensor avgdiff = computeAverageAbsoluteDifference(output_kernel, output_desired);
+    std::cout << "Average absolute difference: " << avgdiff.item<float>() << std::endl;
+
     return 0;
 }
