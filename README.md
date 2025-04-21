@@ -6,6 +6,7 @@
 - semi_compare_model.cc: Source code of the semi program to compare outputs of complete models simulating the real one used in Alpha Zero (using Libtorch built-in CNNs and parallelized version CNNs).
 - model.h: Model simulating the real one used in Alpha Zero using Libtorch built-in CNNs. Some transformations might be left out, such as torch::tanh() on the final output in ResOutputBlock.
 - model_par.h: Model simulating the real one used in Alpha Zero using parallelized version CNNs. Some transformations might be left out, such as torch::tanh() on the final output in ResOutputBlock.
+- input_conv_cuda.cu: Parallelized version CNNs used in ResInputBlock in Alpha Zero with customized kernel call.
 - torso_conv_cuda.cu: Parallelized version CNNs used in ResTorsoBlock in Alpha Zero with customized kernel call.
 - output_conv_cuda.cu: Parallelized version CNNs used in ResOutputBlock in Alpha Zero with customized kernel call.
 

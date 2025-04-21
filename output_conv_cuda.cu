@@ -1,7 +1,6 @@
 #include <torch/extension.h>
 #include <cuda.h>
 #include <cuda_runtime.h>
-#include "conv_functions.h"
 
 // Parameters for output layer.
 #define OUTPUT_INPUT_HEIGHT      8

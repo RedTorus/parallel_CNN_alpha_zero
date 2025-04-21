@@ -12,12 +12,12 @@ LIBTORCH_LDFLAGS  = -L$(TORCH_PATH)/lib -L/usr/local/cuda/targets/x86_64-linux/l
 NVCCFLAGS = -O3 -std=c++17 -Xcompiler -fPIC -I$(TORCH_PATH)/include -I$(TORCH_PATH)/include/torch/csrc/api/include $(shell python3-config --includes)
 
 # Source files
-COMPARE_SRCS    = semi_compare.cc torso_conv_cuda.cu output_conv_cuda.cu
-COMPARE_MODEL_SRCS    = semi_compare_model.cc torso_conv_cuda.cu output_conv_cuda.cu
+COMPARE_SRCS    = semi_compare.cc input_conv_cuda.cu torso_conv_cuda.cu output_conv_cuda.cu
+COMPARE_MODEL_SRCS    = semi_compare_model.cc input_conv_cuda.cu torso_conv_cuda.cu output_conv_cuda.cu
 
 # Object files
-COMPARE_OBJS    = semi_compare.o torso_conv_cuda.o output_conv_cuda.o
-COMPARE_MODEL_OBJS    = semi_compare_model.o torso_conv_cuda.o output_conv_cuda.o
+COMPARE_OBJS    = semi_compare.o input_conv_cuda.o torso_conv_cuda.o output_conv_cuda.o
+COMPARE_MODEL_OBJS    = semi_compare_model.o input_conv_cuda.o torso_conv_cuda.o output_conv_cuda.o
 
 # Target executables
 COMPARE_TARGET    = compare_program
@@ -40,6 +40,10 @@ semi_compare.o: semi_compare.cc
 # Compile rule for the model compare source file
 semi_compare_model.o: semi_compare_model.cc
 	$(CXX) $(LIBTORCH_CXXFLAGS) -c $< -o $@
+
+# Compile rule for input_conv_cuda.cu
+input_conv_cuda.o: input_conv_cuda.cu
+	$(NVCC) $(NVCCFLAGS) -c $< -o $@
 
 # Compile rule for torso_conv_cuda.cu
 torso_conv_cuda.o: torso_conv_cuda.cu

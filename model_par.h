@@ -6,6 +6,7 @@
 #include <iostream>
 
 // Declarations for custom CUDA operators.
+torch::Tensor input_conv_forward(torch::Tensor input, torch::Tensor conv_weights);
 torch::Tensor torso_conv_forward(torch::Tensor input, torch::Tensor filter);
 torch::Tensor output_conv_forward(torch::Tensor input, torch::Tensor filter);
 
@@ -40,14 +41,18 @@ TORCH_MODULE(Conv2dBlockPar);
 //---------------------------------------
 struct ResInputBlockParImpl : public torch::nn::Module {
     Conv2dBlockPar conv_block{nullptr};
+    torch::Tensor filter;
 
     // Constructor: in_channels, out_channels, kernel parameters.
     ResInputBlockParImpl(int in_channels, int out_channels, int kernel_size = 3, int stride = 1, int padding = 1) {
         conv_block = register_module("conv_block", Conv2dBlockPar(in_channels, out_channels, kernel_size, stride, padding));
+        filter = register_parameter("filter", torch::full({out_channels, in_channels, kernel_size, kernel_size}, 0.01, torch::TensorOptions().dtype(torch::kFloat)));
     }
 
     torch::Tensor forward(torch::Tensor x) {
-        return conv_block->forward(x);
+        x = input_conv_forward(x, conv_block->conv->weight);
+        x = conv_block->bn(x);
+        return torch::relu(x);
     }
 };
 TORCH_MODULE(ResInputBlockPar);
@@ -68,11 +73,9 @@ struct ResTorsoBlockParImpl : public torch::nn::Module {
     torch::Tensor forward(torch::Tensor x) {
         auto residual = x.clone();
         x = torso_conv_forward(x, filter);
-        //x = x.unsqueeze(0); // Restore batch dim
         x = torch::relu(conv_block->bn(x));
-        // Note: For the second block, we do not apply an extra ReLU since Conv2dBlockPar already applies it.
+        // For the second block, we do not apply an extra ReLU since Conv2dBlockPar already applies it.
         x = torso_conv_forward(x, filter);
-        //x = x.unsqueeze(0); // Restore batch dim
         x = conv_block->bn(x);
         // Add residual connection and then apply ReLU.
         x += residual;

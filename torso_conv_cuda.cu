@@ -1,7 +1,6 @@
 #include <torch/extension.h>
 #include <cuda.h>
 #include <cuda_runtime.h>
-#include "conv_functions.h"
 
 // Block dimensions for the torso kernel.
 #define BLOCK_DIM_X 128

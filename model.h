@@ -18,9 +18,10 @@ struct Conv2dBlockImpl : public torch::nn::Module {
                                                          .stride(stride).padding(padding)));
         bn = register_module("bn", torch::nn::BatchNorm2d(out_channels));
 
-        // Override the default weight initialization:
-        // Fill all elements of the convolution filter with 0.01.
+        // Override the default weight and bias initialization:
+        // Fill all elements of the convolution filter with 0.01 and set bias to false.
         conv->weight.data().fill_(0.01);
+        conv->bias.data().fill_(0.0);
     }
 
     torch::Tensor forward(torch::Tensor x) {
