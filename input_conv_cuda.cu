@@ -79,7 +79,7 @@ __global__ void input_conv_kernel(const float* __restrict__ d_input,
     }
 
 
-    __global__ void input_conv_kernelV2(const float* __restrict__ d_input,
+__global__ void input_conv_kernelV2(const float* __restrict__ d_input,
         const float* __restrict__ d_weight,
         float* __restrict__ d_output) {
     
