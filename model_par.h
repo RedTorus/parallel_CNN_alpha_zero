@@ -72,10 +72,10 @@ struct ResTorsoBlockParImpl : public torch::nn::Module {
 
     torch::Tensor forward(torch::Tensor x) {
         auto residual = x.clone();
-        x = torso_conv_forward(x, filter);
+        x = torso_conv_forward(x, conv_block->conv->weight);
         x = torch::relu(conv_block->bn(x));
         // For the second block, we do not apply an extra ReLU since Conv2dBlockPar already applies it.
-        x = torso_conv_forward(x, filter);
+        x = torso_conv_forward(x, conv_block->conv->weight);
         x = conv_block->bn(x);
         // Add residual connection and then apply ReLU.
         x += residual;
@@ -97,7 +97,7 @@ struct ResOutputBlockParImpl : public torch::nn::Module {
     }
 
     torch::Tensor forward(torch::Tensor x) {
-        x = output_conv_forward(x, filter);
+        x = output_conv_forward(x, conv_block_output->conv->weight);
         //x = x.unsqueeze(0); // Restore batch dim
         x = torch::relu(conv_block_output->bn(x));
         x = x.view({x.size(0), -1});
@@ -125,7 +125,8 @@ struct ModelParImpl : public torch::nn::Module {
 
     torch::Tensor forward(torch::Tensor x) {
         x = res_input->forward(x);
-        x = res_torso->forward(x);
+        for (int i = 0; i < 5; i++)
+            x = res_torso->forward(x);
         x = res_output->forward(x);
         return x;
     }

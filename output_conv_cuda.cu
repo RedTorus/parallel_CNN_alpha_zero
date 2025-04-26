@@ -79,7 +79,7 @@ __global__ void outputConvKernel(const float* __restrict__ d_input,
     __syncthreads();
 }
 
-__global__ void outputConvKernel(const float* __restrict__ d_input,
+__global__ void outputConvKernelV2(const float* __restrict__ d_input,
     const float* __restrict__ d_filter,
     float* __restrict__ d_output,
     int in_channels, int in_height, int in_width,
@@ -115,7 +115,7 @@ __global__ void outputConvKernel(const float* __restrict__ d_input,
     int numT = BLOCK_DIM_X*BLOCK_DIM_Y;
     __shared__ float sharedWeight[OUTPUT_INPUT_CHANNELS*OUTPUT_FILTER_SIZE*OUTPUT_FILTER_SIZE];
     for (int flatIndex = tid; flatIndex < OUTPUT_INPUT_CHANNELS*OUTPUT_FILTER_SIZE*OUTPUT_FILTER_SIZE; flatIndex += numT) {
-        sharedWeight[flatIndex] = d_filter[TBid*OUTPUT_INPUT_CHANNELS*OUTPUT_FILTER_SIZE*OUTPUT_FILTER_SIZE + flatIndex];
+        sharedWeight[flatIndex] = d_filter[out_channel_idx*OUTPUT_INPUT_CHANNELS*OUTPUT_FILTER_SIZE*OUTPUT_FILTER_SIZE + flatIndex];
     }
 
     // Synchronize after data copy is completed
@@ -179,7 +179,7 @@ torch::Tensor output_conv_forward(torch::Tensor input, torch::Tensor filter) {
     //dim3 block(OUTPUT_BLOCK_DIM_X, OUTPUT_BLOCK_DIM_Y);
     //dim3 grid(out_channels);
 
-    outputConvKernel<<<out_channels, BLOCK_DIM_X * BLOCK_DIM_Y>>>(input.data_ptr<float>(),
+    outputConvKernelV2<<<out_channels, BLOCK_DIM_X * BLOCK_DIM_Y>>>(input.data_ptr<float>(),
                                       filter.data_ptr<float>(),
                                       output.data_ptr<float>(),
                                       in_channels, in_height, in_width,

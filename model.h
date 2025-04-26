@@ -112,7 +112,8 @@ struct ModelImpl : public torch::nn::Module {
 
     torch::Tensor forward(torch::Tensor x) {
         x = res_input->forward(x);
-        x = res_torso->forward(x);
+        for (int i = 0; i < 5; i++)
+            x = res_torso->forward(x);
         x = res_output->forward(x);
         return x;
     }

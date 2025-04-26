@@ -85,7 +85,6 @@ __global__ void torsoConvKernel(const float* __restrict__ d_input,
     __syncthreads();
 }
 
-
 __global__ void torsoConvKernelV2(const float* __restrict__ d_input,
     const float* __restrict__ d_filter,
     float* __restrict__ d_output,
@@ -164,6 +163,7 @@ __global__ void torsoConvKernelV2(const float* __restrict__ d_input,
 
     __syncthreads();
 }
+
 
 // C++ interface: Expects input tensor of shape [1, 128, 8, 8] and filter of shape [128, 128, 3, 3].
 // Returns a tensor of shape [128, 8, 8] (batch dimension is dropped).

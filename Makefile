@@ -1,8 +1,6 @@
 # Update this path to your actual libtorch installation directory
-#Kaustabh's torchpath
-TORCH_PATH ?= /afs/.ece.cmu.edu/usr/kaustabp/open_spiel/open_spiel/libtorch/libtorch
-#Hanlu's torchpath
-#TORCH_PATH ?= /afs/.ece.cmu.edu/usr/hanlux/Private/open_spiel/open_spiel/libtorch/libtorch
+TORCH_PATH ?= /afs/.ece.cmu.edu/usr/hanlux/Private/open_spiel/open_spiel/libtorch/libtorch
+
 CXX = g++
 NVCC = nvcc
 
