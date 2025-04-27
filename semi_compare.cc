@@ -130,7 +130,7 @@ int main() {
         float mean_err_cpu_custom = check_mean_error(output1, output3);
         float mean_err_gpu_custom = check_mean_error(output2, output3);
 
-        // Write results to files
+        // Write all results to files
         time_file << cpu_exec_time << " " << gpu_baseline_time << " " << gpu_par_time << "\n";
         error_file << mean_err_cpu_gpu << " " << mean_err_cpu_custom << " " << mean_err_gpu_custom << "\n";
     }
