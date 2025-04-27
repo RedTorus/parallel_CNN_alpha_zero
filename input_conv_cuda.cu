@@ -16,6 +16,7 @@
 #define PADDING          1
  
 constexpr int SHARED_COLS = 32;
+constexpr int SHARED_COLS_PAD=33;
 constexpr int SHARED_ROWS = 10; //(TOTAL_INPUT + SHARED_COLS - 1) / SHARED_COLS;
 constexpr int TOTAL_INPUT = INPUT_CHANNELS * INPUT_HEIGHT * INPUT_WIDTH; // 5*8*8 = 320
 constexpr int WEIGHT_COUNT   = INPUT_CHANNELS * KERNEL_SIZE * KERNEL_SIZE; 
@@ -37,11 +38,11 @@ __global__ void input_conv_kernel(const float* __restrict__ d_input,
         // (c,y,x) -> N = c*H*W + y*W + x
         // N -> (r,c) = (N/32, N%32)
 
-        __shared__ float sharedInput[SHARED_ROWS][SHARED_COLS];
+        __shared__ float sharedInput[SHARED_ROWS][SHARED_COLS_PAD];
         for (int flatIndex = tid; flatIndex < TOTAL_INPUT; flatIndex += numT) {
         
-            int sharedRow = flatIndex / SHARED_COLS;  // 0..255
-            int sharedCol = flatIndex % SHARED_COLS;  // 0..31
+            int sharedRow = flatIndex / SHARED_COLS_PAD;  // 0..255
+            int sharedCol = flatIndex % SHARED_COLS_PAD;  // 0..31
             sharedInput[sharedRow][sharedCol] = d_input[flatIndex];
         }
 
@@ -61,8 +62,8 @@ __global__ void input_conv_kernel(const float* __restrict__ d_input,
                     float inputVal = 0.0f;
                     if (inRow >= 0 && inRow < INPUT_HEIGHT && inCol >= 0 && inCol < INPUT_WIDTH) {
                         int flatIndex = inc * INPUT_HEIGHT * INPUT_WIDTH + inRow * INPUT_WIDTH + inCol;
-                        int srow = flatIndex / SHARED_COLS;
-                        int scol = flatIndex % SHARED_COLS;
+                        int srow = flatIndex / SHARED_COLS_PAD;
+                        int scol = flatIndex % SHARED_COLS_PAD;
                         inputVal = sharedInput[srow][scol];
                     }
                     int weightIndex = outc * WEIGHT_COUNT + inc * KERNEL_SIZE * KERNEL_SIZE + krow * KERNEL_SIZE + kcol;
@@ -82,7 +83,7 @@ __global__ void input_conv_kernel(const float* __restrict__ d_input,
 __global__ void input_conv_kernelV2(const float* __restrict__ d_input,
         const float* __restrict__ d_weight,
         float* __restrict__ d_output) {
-    
+            // each thread computes 1/5 th of an output value for entire row so 8 times
             // For numT = 40
             int numT = blockDim.x;
             int TBid = blockIdx.x;
@@ -95,11 +96,11 @@ __global__ void input_conv_kernelV2(const float* __restrict__ d_input,
             // (c,y,x) -> N = c*H*W + y*W + x
             // N -> (r,c) = (N/32, N%32)
     
-            __shared__ float sharedInput[SHARED_ROWS][SHARED_COLS];
+            __shared__ float sharedInput[SHARED_ROWS][SHARED_COLS_PAD];
             for (int flatIndex = tid; flatIndex < TOTAL_INPUT; flatIndex += numT) {
             
-                int sharedRow = flatIndex / SHARED_COLS;  // 0..255
-                int sharedCol = flatIndex % SHARED_COLS;  // 0..31
+                int sharedRow = flatIndex / SHARED_COLS_PAD;  // 0..255
+                int sharedCol = flatIndex % SHARED_COLS_PAD;  // 0..31
                 sharedInput[sharedRow][sharedCol] = d_input[flatIndex];
             }
 
@@ -124,8 +125,8 @@ __global__ void input_conv_kernelV2(const float* __restrict__ d_input,
                         float inputVal = 0.0f;
                         if (inRow >= 0 && inRow < INPUT_HEIGHT && inCol >= 0 && inCol < INPUT_WIDTH) {
                             int flatIndex = inc * INPUT_HEIGHT * INPUT_WIDTH + inRow * INPUT_WIDTH + inCol;
-                            int srow = flatIndex / SHARED_COLS;
-                            int scol = flatIndex % SHARED_COLS;
+                            int srow = flatIndex / SHARED_COLS_PAD;
+                            int scol = flatIndex % SHARED_COLS_PAD;
                             inputVal = sharedInput[srow][scol];
                         }
                         int weightIndex = inc * KERNEL_SIZE * KERNEL_SIZE + krow * KERNEL_SIZE + kcol;
@@ -140,6 +141,135 @@ __global__ void input_conv_kernelV2(const float* __restrict__ d_input,
             __syncthreads();
         
         }
+
+__global__ void input_conv_kernelV3(const float* __restrict__ d_input,
+            const float* __restrict__ d_weight,
+            float* __restrict__ d_output) {
+        
+            // For numT = 64
+            int numT = blockDim.x;
+            int TBid = blockIdx.x;
+            int tid = threadIdx.x;
+    
+            // Idea: store input and weights that are needed by thread in local memory instead of pulling them from global memory
+    
+            // 1) Stage the input volume into shared memory
+            //    Flatten (inCh, y, x) -> flatIndex, then flatIndex -> (row, col) in [256][32]
+            // (c,y,x) -> N = c*H*W + y*W + x
+            // N -> (r,c) = (N/32, N%32)
+    
+            __shared__ float sharedInput[SHARED_ROWS][SHARED_COLS_PAD];
+            for (int flatIndex = tid; flatIndex < TOTAL_INPUT; flatIndex += numT) {
+            
+                int sharedRow = flatIndex / SHARED_COLS_PAD;  // 0..255
+                int sharedCol = flatIndex % SHARED_COLS_PAD;  // 0..31
+                sharedInput[sharedRow][sharedCol] = d_input[flatIndex];
+            }
+
+            __shared__ float sharedWeight[INPUT_CHANNELS*KERNEL_SIZE*KERNEL_SIZE];
+            for (int flatIndex = tid; flatIndex < INPUT_CHANNELS*KERNEL_SIZE*KERNEL_SIZE; flatIndex += numT) {
+                sharedWeight[flatIndex] = d_weight[TBid*INPUT_CHANNELS*KERNEL_SIZE*KERNEL_SIZE + flatIndex];
+            }
+    
+            __syncthreads();
+    
+            int outc = TBid;
+            //int inc = tid / OUTPUT_WIDTH;
+            int outRow = tid % OUTPUT_WIDTH;
+            int outCol = tid / OUTPUT_WIDTH;
+    
+            // convolution
+            float sum = 0.0f;
+            for (int inc = 0; inc < INPUT_CHANNELS; inc++) {
+                for (int krow = 0; krow < KERNEL_SIZE; krow++) {
+                    for (int kcol = 0; kcol < KERNEL_SIZE; kcol++) {
+
+                        int inRow = outRow + krow - PADDING;
+                        int inCol = outCol + kcol - PADDING;
+                        float inputVal = 0.0f;
+                        if (inRow >= 0 && inRow < INPUT_HEIGHT && inCol >= 0 && inCol < INPUT_WIDTH) {
+                            int flatIndex = inc * INPUT_HEIGHT * INPUT_WIDTH + inRow * INPUT_WIDTH + inCol;
+                            int srow = flatIndex / SHARED_COLS_PAD;
+                            int scol = flatIndex % SHARED_COLS_PAD;
+                            inputVal = sharedInput[srow][scol];
+                        }
+                        int weightIndex = inc * KERNEL_SIZE * KERNEL_SIZE + krow * KERNEL_SIZE + kcol;
+                        float weightVal = sharedWeight[weightIndex];
+                        sum += inputVal * weightVal;
+
+                    }
+                }
+            }
+            int outIndex = outc * OUTPUT_HEIGHT * OUTPUT_WIDTH + outRow * OUTPUT_WIDTH + outCol;
+            d_output[outIndex] = sum;
+            //__syncthreads();
+        
+        } 
+
+__global__ void input_conv_kernelV4(const float* __restrict__ d_input,
+            const float* __restrict__ d_weight,
+            float* __restrict__ d_output) {
+        
+            // For numT = 320
+            int numT = blockDim.x;
+            int TBid = blockIdx.x;
+            int tid = threadIdx.x;
+    
+            // Idea: store input and weights that are needed by thread in local memory instead of pulling them from global memory
+    
+            // 1) Stage the input volume into shared memory
+            //    Flatten (inCh, y, x) -> flatIndex, then flatIndex -> (row, col) in [256][32]
+            // (c,y,x) -> N = c*H*W + y*W + x
+            // N -> (r,c) = (N/32, N%32)
+    
+            __shared__ float sharedInput[SHARED_ROWS][SHARED_COLS_PAD];
+            for (int flatIndex = tid; flatIndex < TOTAL_INPUT; flatIndex += numT) {
+            
+                int sharedRow = flatIndex / SHARED_COLS_PAD;  // 0..255
+                int sharedCol = flatIndex % SHARED_COLS_PAD;  // 0..31
+                sharedInput[sharedRow][sharedCol] = d_input[flatIndex];
+            }
+
+            __shared__ float sharedWeight[INPUT_CHANNELS*KERNEL_SIZE*KERNEL_SIZE];
+            for (int flatIndex = tid; flatIndex < INPUT_CHANNELS*KERNEL_SIZE*KERNEL_SIZE; flatIndex += numT) {
+                sharedWeight[flatIndex] = d_weight[TBid*INPUT_CHANNELS*KERNEL_SIZE*KERNEL_SIZE + flatIndex];
+            }
+    
+            __syncthreads();
+    
+            int outc = TBid;
+            int inc    = tid / (OUTPUT_WIDTH * OUTPUT_HEIGHT);
+            int pix = tid % (OUTPUT_WIDTH * OUTPUT_HEIGHT);     // which of the 64 spatial positions
+            int outRow = pix / OUTPUT_WIDTH;                    // row index 0…7
+            int outCol = pix % OUTPUT_WIDTH;                // col index 0…7
+    
+            // convolution
+            float sum = 0.0f;
+            for (int krow = 0; krow < KERNEL_SIZE; krow++) {
+                for (int kcol = 0; kcol < KERNEL_SIZE; kcol++) {
+
+                    int inRow = outRow + krow - PADDING;
+                    int inCol = outCol + kcol - PADDING;
+                    float inputVal = 0.0f;
+                    if (inRow >= 0 && inRow < INPUT_HEIGHT && inCol >= 0 && inCol < INPUT_WIDTH) {
+                        int flatIndex = inc * INPUT_HEIGHT * INPUT_WIDTH + inRow * INPUT_WIDTH + inCol;
+                        int srow = flatIndex / SHARED_COLS_PAD;
+                        int scol = flatIndex % SHARED_COLS_PAD;
+                        inputVal = sharedInput[srow][scol];
+                    }
+                    int weightIndex = inc * KERNEL_SIZE * KERNEL_SIZE + krow * KERNEL_SIZE + kcol;
+                    float weightVal = sharedWeight[weightIndex];
+                    sum += inputVal * weightVal;
+
+                }
+            }
+
+
+            int outIndex = outc * OUTPUT_HEIGHT * OUTPUT_WIDTH + outRow * OUTPUT_WIDTH + outCol;
+            atomicAdd(&d_output[outIndex], sum);
+            //__syncthreads();
+        
+        } 
 
 torch::Tensor input_conv_forward(torch::Tensor input, torch::Tensor conv_weights) {
     TORCH_CHECK(input.is_cuda(), "input must be a CUDA tensor");
@@ -178,7 +308,7 @@ torch::Tensor input_conv_forward(torch::Tensor input, torch::Tensor conv_weights
     const int blocks  = OUTPUT_CHANNELS;
     auto output = torch::zeros({1, OUTPUT_CHANNELS, OUTPUT_HEIGHT, OUTPUT_WIDTH}, torch::device(torch::kCUDA).dtype(torch::kFloat32));
 
-    input_conv_kernelV2<<<blocks, threads>>>(
+    input_conv_kernelV3<<<blocks, 64>>>(
         input_ptr,
         conv_weights_ptr,
         output.data_ptr<float>()
