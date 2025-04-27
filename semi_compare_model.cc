@@ -7,7 +7,7 @@
 //#include <ATen/ATen.h>
 
 // Helper function to check if two outputs are identical within a tolerance.
-bool outputs_identical(const torch::Tensor& out1, const torch::Tensor& out2, double tol = 1e-2) {
+bool outputs_identical(const torch::Tensor& out1, const torch::Tensor& out2, double tol = 1e-5) {
     return torch::allclose(out1, out2, tol);
 }
 
@@ -126,13 +126,14 @@ int main() {
             std::cout << "The model outputs between baseline on GPU and parallel implementation are different." << std::endl;
         }
 
-        // Compute mean error between output3 and output2
-        float mean_error = check_mean_error(output2, output1);
-        std::cout << "Run " << run+1 << ": Mean error = " << mean_error << std::endl;
+        // Compute mean errors
+        float mean_err_cpu_gpu = check_mean_error(output1, output2);
+        float mean_err_cpu_custom = check_mean_error(output1, output3);
+        float mean_err_gpu_custom = check_mean_error(output2, output3);
 
         // Write results to files
         time_file << cpu_exec_time << " " << gpu_baseline_time << " " << gpu_par_time << "\n";
-        error_file << mean_error << "\n";
+        error_file << mean_err_cpu_gpu << " " << mean_err_cpu_custom << " " << mean_err_gpu_custom << "\n";
     }
 
     time_file.close();
