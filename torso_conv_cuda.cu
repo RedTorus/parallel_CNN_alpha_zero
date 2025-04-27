@@ -14,6 +14,10 @@
 #define TORUS_OUTPUT_HEIGHT      8
 #define TORUS_OUTPUT_WIDTH       8
 
+#define PADDED_COLS  (32 + 1)                                                       // ← pad each row by 1
+#define SHARED_ROWS  ((TORUS_INPUT_CHANNELS/32) * (TORUS_INPUT_HEIGHT * TORUS_INPUT_WIDTH)) // 4*64=256
+
+
 // CUDA kernel for torso convolution.
 // Each block computes one output channel.
 __global__ void torsoConvKernel(const float* __restrict__ d_input,
@@ -163,6 +167,7 @@ __global__ void torsoConvKernelV2(const float* __restrict__ d_input,
 
     __syncthreads();
 }
+
 
 
 // C++ interface: Expects input tensor of shape [1, 128, 8, 8] and filter of shape [128, 128, 3, 3].
