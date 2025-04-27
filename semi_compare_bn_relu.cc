@@ -33,25 +33,33 @@ void write_output(const torch::Tensor& output_tensor, const std::string& filenam
     outfile.close();
 }
 
+// Check mean error of all elements in two tensors
+float check_mean_error(const torch::Tensor& out1, const torch::Tensor& out2) {
+    torch::Tensor diff = torch::abs(out1 - out2);
+    torch::Tensor mean_err_tensor = diff.mean();
+    float mean_error = mean_err_tensor.item<float>();
+    return mean_error;
+}
+
 int main() {
     // Set device
     torch::Device device = torch::cuda::is_available() ? torch::kCUDA : torch::kCPU;
     std::cout << "Using device: " << (device.is_cuda() ? "CUDA" : "CPU") << std::endl;
 
     // Open files to output results
-    std::ofstream time_file("output/cnn_in_execution_times.txt");
+    std::ofstream time_file("output/cnn_torso_execution_times_w_bn.txt");
     if (!time_file) {
-        std::cerr << "Failed to open cnn_in_execution_times.txt for writing" << std::endl;
+        std::cerr << "Failed to open cnn_torso_execution_times_w_bn.txt for writing" << std::endl;
         return -1;
     }
-    std::ofstream error_file("output/cnn_in_mean_errors.txt");
+    std::ofstream error_file("output/cnn_torso_mean_errors_w_bn.txt");
     if (!error_file) {
-        std::cerr << "Failed to open cnn_in_mean_errors.txt for writing" << std::endl;
+        std::cerr << "Failed to open cnn_torso_mean_errors_w_bn.txt for writing" << std::endl;
         return -1;
     }
 
     // Create a dummy input tensor: batch size 1, channels, image.
-    torch::Tensor input = torch::rand({1, 5, 8, 8});
+    torch::Tensor input = torch::rand({1, 128, 8, 8});
     torch::Tensor input_cpu = input.clone();
     input = input.to(device);
 
@@ -66,7 +74,7 @@ int main() {
     int num_runs = 20;
     for (int run = 0; run < num_runs; ++run) {
         // Run forward pass of libtorch CNN on CPU and measure time.
-        torch::nn::Conv2d conv_layer_cpu(torch::nn::Conv2dOptions(5, 128, 3)
+        torch::nn::Conv2d conv_layer_cpu(torch::nn::Conv2dOptions(128, 128, 3)
                                  .stride(1)
                                  .padding(1));
         conv_layer_cpu->weight.data().fill_(0.01);
@@ -80,7 +88,7 @@ int main() {
         std::cout << "Libtorch CNN on CPU took " << cpu_exec_time << " ms." << std::endl;
 
         // Run forward pass of libtorch CNN on GPU and measure time.
-        torch::nn::Conv2d conv_layer_gpu(torch::nn::Conv2dOptions(5, 128, 3)
+        torch::nn::Conv2d conv_layer_gpu(torch::nn::Conv2dOptions(128, 128, 3)
                                  .stride(1)
                                  .padding(1));
         conv_layer_gpu->weight.data().fill_(0.01);
@@ -96,9 +104,9 @@ int main() {
         std::cout << "Libtorch CNN on GPU took " << gpu_baseline_time << " ms." << std::endl;
 
         // Run forward pass of parallelized CNN on GPU and measure time.
-        auto customized_filter = torch::full({128, 5, 3, 3}, 0.01, torch::TensorOptions().dtype(torch::kFloat).device(device));
+        auto customized_filter = torch::full({128, 128, 3, 3}, 0.01, torch::TensorOptions().dtype(torch::kFloat).device(device));
         cudaEventRecord(start_, 0);
-        torch::Tensor output3 = input_conv_forward(input, customized_filter); // Returns shape [1, 128, 8, 8]
+        torch::Tensor output3 = torso_conv_forward(input, customized_filter); // Returns shape [1, 128, 8, 8]
         output3 = batch_norm_gpu(output3);
         output3 = torch::relu(output3);
         cudaEventRecord(stop_, 0);
@@ -126,15 +134,14 @@ int main() {
             std::cout << "The network outputs between baseline on GPU and parallel implementation are different." << std::endl;
         }
 
-        // Compute mean error between output3 and output2
-        torch::Tensor diff = torch::abs(output3 - output2);
-        torch::Tensor mean_err_tensor = diff.mean();
-        float mean_error = mean_err_tensor.item<float>();
-        std::cout << "Run " << run+1 << ": Mean error = " << mean_error << std::endl;
+        // Compute mean errors
+        float mean_err_cpu_gpu = check_mean_error(output1, output2);
+        float mean_err_cpu_custom = check_mean_error(output1, output3);
+        float mean_err_gpu_custom = check_mean_error(output2, output3);
 
         // Write results to files
         time_file << cpu_exec_time << " " << gpu_baseline_time << " " << gpu_par_time << "\n";
-        error_file << mean_error << "\n";
+        error_file << mean_err_cpu_gpu << " " << mean_err_cpu_custom << " " << mean_err_gpu_custom << "\n";
     }
 
     time_file.close();
