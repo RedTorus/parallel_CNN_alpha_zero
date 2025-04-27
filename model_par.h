@@ -46,7 +46,7 @@ struct ResInputBlockParImpl : public torch::nn::Module {
     // Constructor: in_channels, out_channels, kernel parameters.
     ResInputBlockParImpl(int in_channels, int out_channels, int kernel_size = 3, int stride = 1, int padding = 1) {
         conv_block = register_module("conv_block", Conv2dBlockPar(in_channels, out_channels, kernel_size, stride, padding));
-        filter = register_parameter("filter", torch::full({out_channels, in_channels, kernel_size, kernel_size}, 0.01, torch::TensorOptions().dtype(torch::kFloat)));
+        filter = register_parameter("filter", torch::full({out_channels, in_channels, kernel_size, kernel_size}, 0.01, torch::TensorOptions().dtype(torch::kDouble))); ///
     }
 
     torch::Tensor forward(torch::Tensor x) {

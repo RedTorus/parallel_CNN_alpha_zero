@@ -4,6 +4,7 @@
 #include <cuda_runtime.h>
 #include "model.h"
 #include "model_par.h"
+//#include <ATen/ATen.h>
 
 // Helper function to check if two outputs are identical within a tolerance.
 bool outputs_identical(const torch::Tensor& out1, const torch::Tensor& out2, double tol = 1e-2) {
@@ -39,6 +40,7 @@ float check_mean_error(const torch::Tensor& out1, const torch::Tensor& out2) {
 
 int main() {
     // Set device
+
     torch::Device device = torch::cuda::is_available() ? torch::kCUDA : torch::kCPU;
     std::cout << "Using device: " << (device.is_cuda() ? "CUDA" : "CPU") << std::endl;
 
@@ -125,7 +127,7 @@ int main() {
         }
 
         // Compute mean error between output3 and output2
-        float mean_error = check_mean_error(output2, output3);
+        float mean_error = check_mean_error(output2, output1);
         std::cout << "Run " << run+1 << ": Mean error = " << mean_error << std::endl;
 
         // Write results to files

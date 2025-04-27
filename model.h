@@ -3,7 +3,22 @@
 
 #include <torch/torch.h>
 #include <string>
+//#include <ATen/cudnn/Handle.h>
+//#include <ATen/ATen.h>
 #include <iostream>
+
+// namespace {  // ①
+//     struct CuDNNSettingsInitializer {
+//       CuDNNSettingsInitializer() {
+//         // keep cuDNN enabled but deterministic
+//         at::globalContext().setBenchmarkCuDNN(false);
+//         at::globalContext().setDeterministicCuDNN(true);
+//         at::globalContext().setEnabledCuDNN(false);
+
+//         // note: we do NOT disable cuDNN entirely
+//       }
+//     } _cudnn_settings_init;
+//   }
 
 //---------------------------------------
 // Conv2dBlockImpl: A simple conv2d block with BatchNorm and ReLU.
