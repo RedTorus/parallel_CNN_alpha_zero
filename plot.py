@@ -1,65 +1,72 @@
-import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
-from pathlib import Path
+import numpy as np
+import os
 
-# File path
-file_path = Path("output/model_execution_times.txt")
+# Define file paths (assuming all files are inside 'output/' directory)
+input_kernel_file = 'output/cnn_in_execution_times.txt'
+torso_kernel_file = 'output/cnn_torso_execution_times.txt'
+output_kernel_file = 'output/cnn_out_execution_times.txt'
 
-# Load data
-data = np.loadtxt(file_path)
-cpu_times = data[:, 0]
-gpu_default_times = data[:, 1]
-gpu_custom_times = data[:, 2]
+# Load datasets
+datasets = [
+    pd.read_csv(input_kernel_file, delim_whitespace=True, header=None),
+    pd.read_csv(torso_kernel_file, delim_whitespace=True, header=None),
+    pd.read_csv(output_kernel_file, delim_whitespace=True, header=None)
+]
 
-# Remove first row for averages (outlier)
-cpu_avg = np.mean(cpu_times[1:])
-gpu_default_avg = np.mean(gpu_default_times[1:])
-gpu_custom_avg = np.mean(gpu_custom_times[1:])
+titles = ['Input Kernel Execution Times', 'Torso Kernel Execution Times', 'Output Kernel Execution Times']
+column_labels = ['CPU', 'GPU', 'Parallel GPU']
 
-cpu_max, cpu_min = np.max(cpu_times), np.min(cpu_times)
-gpu_default_max, gpu_default_min = np.max(gpu_default_times), np.min(gpu_default_times)
-gpu_custom_max, gpu_custom_min = np.max(gpu_custom_times), np.min(gpu_custom_times)
+# Create figure
+fig, axs = plt.subplots(1, 3, figsize=(18, 6))
 
-# Speedups
-speedup_custom_vs_cpu = cpu_times / gpu_custom_times
-speedup_custom_vs_default_gpu = gpu_default_times / gpu_custom_times
+speedups_vs_gpu = []
+speedups_vs_cpu = []
 
-# Remove first speedup entry for average computation
-speedup_custom_vs_cpu_avg = np.mean(speedup_custom_vs_cpu[1:])
-speedup_custom_vs_cpu_max = np.max(speedup_custom_vs_cpu)
+for i, (data, title) in enumerate(zip(datasets, titles)):
+    # Exclude the first row (outlier) when calculating mean/min
+    data_filtered = data.iloc[1:]
 
-speedup_custom_vs_default_gpu_avg = np.mean(speedup_custom_vs_default_gpu[1:])
-speedup_custom_vs_default_gpu_max = np.max(speedup_custom_vs_default_gpu)
+    means = data_filtered.mean()
+    mins = data_filtered.min()
+    maxs = data.max()  # Include outlier for max values
 
-# Print speedup results
-print(f"Average speedup (Custom GPU vs CPU): {speedup_custom_vs_cpu_avg:.2f}x")
-print(f"Maximum speedup (Custom GPU vs CPU): {speedup_custom_vs_cpu_max:.2f}x")
-print(f"Average speedup (Custom GPU vs Default GPU): {speedup_custom_vs_default_gpu_avg:.2f}x")
-print(f"Maximum speedup (Custom GPU vs Default GPU): {speedup_custom_vs_default_gpu_max:.2f}x")
+    # Compute speedups
+    parallel_gpu = data_filtered[2]
+    gpu = data_filtered[1]
+    cpu = data_filtered[0]
 
-# Plotting
-labels = ['Avg', 'Max', 'Min']
-cpu_vals = [cpu_avg, cpu_max, cpu_min]
-gpu_default_vals = [gpu_default_avg, gpu_default_max, gpu_default_min]
-gpu_custom_vals = [gpu_custom_avg, gpu_custom_max, gpu_custom_min]
+    speedup_vs_gpu = (gpu / parallel_gpu).mean()
+    speedup_vs_cpu = (cpu / parallel_gpu).mean()
 
-x = np.arange(len(labels))  # [0, 1, 2]
-bar_width = 0.25
+    speedups_vs_gpu.append(speedup_vs_gpu)
+    speedups_vs_cpu.append(speedup_vs_cpu)
 
-fig, ax = plt.subplots(figsize=(10, 6))
+    # Plot bars
+    x = np.arange(3)
+    axs[i].bar(x, means, width=0.5, tick_label=column_labels)
 
-ax.bar(x - bar_width, cpu_vals, width=bar_width, label='CPU', color='#1f77b4')
-ax.bar(x, gpu_default_vals, width=bar_width, label='Default GPU', color='#ff7f0e')
-ax.bar(x + bar_width, gpu_custom_vals, width=bar_width, label='Custom GPU', color='#2ca02c')
+    # Plot min-max lines
+    for xi, min_val, max_val in zip(x, mins, maxs):
+        axs[i].plot([xi, xi], [min_val, max_val], color='r', linestyle='--', marker='o')
 
-ax.set_xticks(x)
-ax.set_xticklabels(labels)
-ax.set_ylabel("Execution Time (ms)")
-ax.set_title("Execution Time Comparison")
-ax.set_yscale('log')
-ax.grid(True, axis='y', linestyle='--', linewidth=0.7)
-ax.set_axisbelow(True)
-ax.legend()
+    axs[i].set_yscale('log')
+    axs[i].set_title(title)
+    axs[i].set_ylabel('Execution Time (ms)')
+    axs[i].set_xticks(x)
+    axs[i].set_xticklabels(column_labels, rotation=15, ha='right')
+    axs[i].grid(True, which="both", linestyle='--', alpha=0.5)
+    axs[i].legend(['Min-Max Range'])
 
 plt.tight_layout()
 plt.show()
+
+# Print speedup summary
+speedup_summary = pd.DataFrame({
+    'Component': ['Input Kernel', 'Torso Kernel', 'Output Kernel'],
+    'Speedup vs GPU': speedups_vs_gpu,
+    'Speedup vs CPU': speedups_vs_cpu
+})
+
+print(speedup_summary)
