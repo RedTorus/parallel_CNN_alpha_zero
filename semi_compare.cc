@@ -59,7 +59,7 @@ int main() {
 
     int num_runs = 20;
 
-    int mode=1;
+    int mode=0;
 
     if (mode == 0) {
 

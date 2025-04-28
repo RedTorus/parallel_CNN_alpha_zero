@@ -14,8 +14,10 @@
 #define TORUS_OUTPUT_HEIGHT      8
 #define TORUS_OUTPUT_WIDTH       8
 
-#define PADDED_COLS  (32 + 1)                                                       // ← pad each row by 1
-#define SHARED_ROWS  ((TORUS_INPUT_CHANNELS/32) * (TORUS_INPUT_HEIGHT * TORUS_INPUT_WIDTH)) // 4*64=256
+// at top, add these two macros:
+#define PADDED_COLS  (32 + 1)                                                             // 33 columns
+// #define SHARED_ROWS  ((TORUS_INPUT_CHANNELS * TORUS_INPUT_HEIGHT * TORUS_INPUT_WIDTH + PADDED_COLS - 1) / PADDED_COLS) // = ceil(8192/33)=249
+
 
 
 // CUDA kernel for torso convolution.
@@ -162,12 +164,71 @@ __global__ void torsoConvKernelV2(const float* __restrict__ d_input,
         }
     // Atomically add the computed sum into the output pixel.
     atomicAdd(&d_output[out_channel_idx * (out_height * out_width) + out_row * out_width + out_col], sum);
-    __syncthreads();
+    //__syncthreads();
     }
 
-    __syncthreads();
+    //__syncthreads();
 }
 
+
+__global__ void torsoConvKernelV3(
+    const float* __restrict__ d_input,
+    const float* __restrict__ d_filter,
+    float*       __restrict__ d_output,
+    int in_channels,
+    int in_height,
+    int in_width,
+    int filter_size,
+    int out_height,
+    int out_width)
+{
+    const int tid             = threadIdx.x;             // 0…(in_channels*out_width−1)
+    const int out_channel_idx = blockIdx.x;              // one block per output channel
+    const int channel_size    = in_height * in_width;    // 64
+    const int Wcount          = in_channels * filter_size * filter_size; // 128*9
+
+    // 1) Stage *only* this block’s filter into shared memory
+    __shared__ float s_weight[/*128*3*3=*/ 128*9];
+    for (int w = tid; w < Wcount; w += blockDim.x) {
+        s_weight[w] = d_filter[out_channel_idx*Wcount + w];
+    }
+    __syncthreads();
+
+    // 2) Decode this thread’s (channel, output‐column)
+    const int in_channel_idx = tid % in_channels;        // 0…127
+    const int out_col        = tid / in_channels;        // 0…7
+
+    // 3) Slide over rows & do the 3×3 dot‐product
+    for (int out_row = 0; out_row < out_height; ++out_row) {
+        float sum = 0.0f;
+
+        #pragma unroll
+        for (int fr = 0; fr < filter_size; ++fr) {
+            #pragma unroll
+            for (int fc = 0; fc < filter_size; ++fc) {
+                int in_r = out_row + fr - (filter_size/2);
+                int in_c = out_col  + fc - (filter_size/2);
+                float in_val = 0.0f;
+                if ((unsigned)in_r < (unsigned)in_height &&
+                    (unsigned)in_c < (unsigned)in_width) {
+                    // **direct global load** instead of shared‐mem
+                    int idx = in_channel_idx*channel_size
+                            + in_r*in_width + in_c;
+                    in_val = d_input[idx];
+                }
+                // use the staged weight
+                int widx = in_channel_idx*(filter_size*filter_size)
+                         + fr*filter_size + fc;
+                sum += in_val * s_weight[widx];
+            }
+        }
+
+        // 4) Each thread writes _its_ unique partial sum
+        int outIndex = out_channel_idx*(out_height*out_width)
+                     + out_row*out_width + out_col;
+        atomicAdd(&d_output[outIndex], sum);
+    }
+}
 
 
 // C++ interface: Expects input tensor of shape [1, 128, 8, 8] and filter of shape [128, 128, 3, 3].
